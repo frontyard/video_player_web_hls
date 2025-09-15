@@ -21,6 +21,7 @@ dependencies:
   http: ^1.0.0
   video_player_platform_interface: ^6.2.0
   web: ">=1.0.0 <2.0.0"
+  shared_preferences: ^2.2.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -28,3 +29,9 @@ dev_dependencies:
 environment:
   sdk: ^3.4.0
   flutter: ">=3.22.0"
+
+# FOR TESTING AND INITIAL REVIEW ONLY. DO NOT MERGE.
+# See https://github.com/flutter/flutter/blob/master/docs/ecosystem/contributing/README.md#changing-federated-plugins
+dependency_overrides:
+  video_player_platform_interface:
+    { path: ../packages/packages/video_player/video_player_platform_interface }

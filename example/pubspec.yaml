@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -21,7 +21,6 @@ environment:
   sdk: ^3.3.0
   flutter: ">=3.19.0"
 
-
 dependencies:
   flutter:
     sdk: flutter
@@ -35,3 +34,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+# FOR TESTING AND INITIAL REVIEW ONLY. DO NOT MERGE.
+# See https://github.com/flutter/flutter/blob/master/docs/ecosystem/contributing/README.md#changing-federated-plugins
+dependency_overrides:
+  video_player: { path: ../../packages/packages/video_player/video_player }

@@ -8,8 +8,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 import 'package:video_player_web_hls/hls.dart';
 import 'package:video_player_web_hls/no_script_tag_exception.dart';
 import 'package:video_player_web_hls/src/pkg_web_tweaks.dart';
@@ -38,8 +39,7 @@ const Map<int, String> _kErrorValueToErrorDescription = <int, String>{
 
 // The default error message, when the error is an empty string
 // See: https://developer.mozilla.org/en-US/docs/Web/API/MediaError/message
-const String _kDefaultErrorMessage =
-    'No further diagnostic information can be determined or provided.';
+const String _kDefaultErrorMessage = 'No further diagnostic information can be determined or provided.';
 
 /// Wraps a [html.VideoElement] so its API complies with what is expected by the plugin.
 class VideoPlayer {
@@ -125,8 +125,18 @@ class VideoPlayer {
                 debugPrint('Error parsing hlsError: $e');
               }
             }.toJS);
+        _hls!.on(
+            'hlsAudioTrackSwitched',
+            ((String _, JSObject __) {
+              debugPrint('HLS.js reports audio track change');
+            }.toJS));
+        _hls!.on(
+            'hlsManifestParsed',
+            ((String _, JSObject __) {
+              _applyPreferredAudioLanguage();
+            }.toJS));
         _eventsSubscriptions.add(_videoElement.onCanPlay.listen((dynamic _) {
-          _onVideoElementInitialization(_) ;
+          _onVideoElementInitialization(_);
           setBuffering(false);
         }));
       } catch (e) {
@@ -140,8 +150,7 @@ class VideoPlayer {
         }
         _onVideoElementInitialization(event);
       };
-      _eventsSubscriptions
-          .add(_videoElement.onDurationChange.listen(onDurationChange));
+      _eventsSubscriptions.add(_videoElement.onDurationChange.listen(onDurationChange));
     }
 
     // Needed for Safari iOS 17, which may not send `canplay`.
@@ -305,8 +314,7 @@ class VideoPlayer {
 
   // Sends an [VideoEventType.initialized] [VideoEvent] with info about the wrapped video.
   void _sendInitialized() {
-    final Duration? duration =
-        convertNumVideoDurationToPluginDuration(_videoElement.duration);
+    final Duration? duration = convertNumVideoDurationToPluginDuration(_videoElement.duration);
 
     final Size? size = _videoElement.videoHeight.isFinite
         ? Size(
@@ -333,9 +341,7 @@ class VideoPlayer {
     if (_isBuffering != buffering) {
       _isBuffering = buffering;
       _eventController.add(VideoEvent(
-        eventType: _isBuffering
-            ? VideoEventType.bufferingStart
-            : VideoEventType.bufferingEnd,
+        eventType: _isBuffering ? VideoEventType.bufferingStart : VideoEventType.bufferingEnd,
       ));
     }
   }
@@ -363,17 +369,14 @@ class VideoPlayer {
   bool canPlayHlsNatively() {
     bool canPlayHls = false;
     try {
-      final String canPlayType =
-          _videoElement.canPlayType('application/vnd.apple.mpegurl');
+      final String canPlayType = _videoElement.canPlayType('application/vnd.apple.mpegurl');
       canPlayHls = canPlayType != '';
     } catch (e) {}
     return canPlayHls;
   }
 
   Future<bool> shouldUseHlsLibrary() async {
-    return isSupported() &&
-        (uri.toString().contains('m3u8') || await _testIfM3u8()) &&
-        !canPlayHlsNatively();
+    return isSupported() && (uri.toString().contains('m3u8') || await _testIfM3u8()) && !canPlayHlsNatively();
   }
 
   Future<bool> _testIfM3u8() async {
@@ -390,8 +393,7 @@ class VideoPlayer {
       } else {
         headers['Range'] = 'bytes=0-1023';
       }
-      final http.Response response =
-          await http.get(Uri.parse(this.uri), headers: headers);
+      final http.Response response = await http.get(Uri.parse(this.uri), headers: headers);
       final String body = response.body;
       if (!body.contains('#EXTM3U')) {
         return false;
@@ -452,5 +454,88 @@ class VideoPlayer {
       _onContextMenu = null;
     }
     _videoElement.removeAttribute('disableRemotePlayback');
+  }
+
+  // Async handler for manifest parsed event
+  Future<void> _applyPreferredAudioLanguage() async {
+    debugPrint('HLS manifest parsed, audio tracks should be available now');
+
+    // Try to get preferred audio language from shared preferences
+    String? preferredLanguage;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      preferredLanguage = prefs.getString('hls_preferred_audio_language');
+    } catch (e) {
+      debugPrint('Error retrieving preferred audio language from shared preferences: $e');
+    }
+
+    // Only proceed if we have a preferred language
+    if (preferredLanguage == null) {
+      debugPrint('Preferred audio language is not set');
+    } else {
+      debugPrint('Applying preferred audio language: $preferredLanguage');
+
+      try {
+        // Try the audioTracks property
+        final dynamic audioTracksObj = _hls!.audioTracks;
+        if (audioTracksObj != null) {
+          try {
+            final int tracksLength = audioTracksObj.length as int;
+            debugPrint('Found $tracksLength audio tracks after manifest parsed');
+
+            if (tracksLength == 0) {
+              debugPrint('No audio tracks available');
+              return;
+            }
+
+            int? matchingTrackIndex;
+
+            // Iterate through audio tracks to find a matching language
+            for (int i = 0; i < tracksLength; i++) {
+              final dynamic trackObj = audioTracksObj[i];
+              debugPrint('Examining track $i');
+
+              // Skip invalid tracks
+              if (trackObj == null) {
+                debugPrint('Track $i is null, skipping');
+                continue;
+              }
+
+              try {
+                // Get track properties using dynamic access for compatibility
+                final String trackLang = (trackObj.lang as String?) ?? '';
+                debugPrint('Track $i - language: $trackLang');
+
+                // Check for language match
+                if (trackLang.toLowerCase() == preferredLanguage.toLowerCase()) {
+                  matchingTrackIndex = i;
+                  debugPrint('Found matching language track at index: $i');
+                  break;
+                }
+              } catch (e) {
+                // Skip this track if we can't access its properties
+                debugPrint('Error accessing track $i properties: $e');
+                continue;
+              }
+            }
+
+            if (matchingTrackIndex != null && matchingTrackIndex >= 0) {
+              // Set the audio track if we found a valid one
+              debugPrint('Setting audio track to: $matchingTrackIndex');
+              _hls!.audioTrack = matchingTrackIndex;
+              debugPrint('Successfully set audio track');
+            } else {
+              debugPrint('No valid audio track found');
+            }
+          } catch (e) {
+            debugPrint('Error accessing audioTracks.length: $e');
+          }
+        } else {
+          debugPrint('Audio tracks object is null after manifest parsed');
+        }
+      } catch (e) {
+        debugPrint('Error accessing audio tracks after manifest parsed: $e');
+      }
+    }
   }
 }

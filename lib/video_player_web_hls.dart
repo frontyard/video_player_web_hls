@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 import 'package:web/web.dart' as web;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/video_player.dart';
 
@@ -70,9 +71,11 @@ class VideoPlayerPluginHls extends VideoPlayerPlatform {
         uri = assetUrl;
         break;
       case DataSourceType.file:
-        return Future<int>.error(UnimplementedError('web implementation of video_player cannot play local files'));
+        return Future<int>.error(UnimplementedError(
+            'web implementation of video_player cannot play local files'));
       case DataSourceType.contentUri:
-        return Future<int>.error(UnimplementedError('web implementation of video_player cannot play content uri'));
+        return Future<int>.error(UnimplementedError(
+            'web implementation of video_player cannot play content uri'));
     }
 
     final web.HTMLVideoElement videoElement = web.HTMLVideoElement()
@@ -161,4 +164,16 @@ class VideoPlayerPluginHls extends VideoPlayerPlatform {
   /// Sets the audio mode to mix with other sources (ignored)
   @override
   Future<void> setMixWithOthers(bool mixWithOthers) => Future<void>.value();
+
+  /// Sets preferred audio language
+  @override
+  Future<void> setPreferredAudioLanguage(String? preferredAudioLanguage) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (preferredAudioLanguage != null) {
+      await prefs.setString(
+          'hls_preferred_audio_language', preferredAudioLanguage);
+    } else {
+      await prefs.remove('hls_preferred_audio_language');
+    }
+  }
 }
